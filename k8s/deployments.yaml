@@ -1,0 +1,191 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trustescrow-backend
+  namespace: trustescrow
+  labels:
+    app: trustescrow-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: trustescrow-backend
+  template:
+    metadata:
+      labels:
+        app: trustescrow-backend
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/trustescrow/backend:latest
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: trustescrow-config
+            - secretRef:
+                name: trustescrow-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/ready
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+      volumes:
+        - name: logs
+          emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - trustescrow-backend
+                topologyKey: kubernetes.io/hostname
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trustescrow-frontend
+  namespace: trustescrow
+  labels:
+    app: trustescrow-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: trustescrow-frontend
+  template:
+    metadata:
+      labels:
+        app: trustescrow-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/trustescrow/frontend:latest
+          ports:
+            - containerPort: 80
+          envFrom:
+            - configMapRef:
+                name: trustescrow-config
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rust-crypto-service
+  namespace: trustescrow
+  labels:
+    app: rust-crypto
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rust-crypto
+  template:
+    metadata:
+      labels:
+        app: rust-crypto
+    spec:
+      containers:
+        - name: rust-crypto
+          image: ghcr.io/trustescrow/rust-crypto:latest
+          ports:
+            - containerPort: 3001
+          envFrom:
+            - secretRef:
+                name: trustescrow-secrets
+          env:
+            - name: PORT
+              value: "3001"
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          livenessProbe:
+            tcpSocket:
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-fraud-service
+  namespace: trustescrow
+  labels:
+    app: ai-fraud
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-fraud
+  template:
+    metadata:
+      labels:
+        app: ai-fraud
+    spec:
+      containers:
+        - name: ai-fraud
+          image: ghcr.io/trustescrow/ai-fraud:latest
+          ports:
+            - containerPort: 5001
+          envFrom:
+            - configMapRef:
+                name: trustescrow-config
+            - secretRef:
+                name: trustescrow-secrets
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5001
+            initialDelaySeconds: 30
+            periodSeconds: 10
