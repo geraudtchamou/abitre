@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  rouleaux-ledger:
+    build:
+      context: ./rouleaux-ledger
+      dockerfile: Dockerfile
+    container_name: rouleaux-ledger
+    ports:
+      - "3001:3001"
+    environment:
+      - DATABASE_URL=postgres://rouleaux:rouleaux_password@postgres:5432/rouleaux
+      - ROULEAUX_PORT=3001
+      - RUST_LOG=rouleaux_ledger=info,tower_http=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - trustescrow-network
+    restart: unless-stopped
+    volumes:
+      - rouleaux_data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # PostgreSQL for Rouleaux Ledger
+  postgres:
+    image: postgres:15-alpine
+    container_name: rouleaux-postgres
+    environment:
+      POSTGRES_USER: rouleaux
+      POSTGRES_PASSWORD: rouleaux_password
+      POSTGRES_DB: rouleaux
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_rouleaux_data:/var/lib/postgresql/data
+    networks:
+      - trustescrow-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rouleaux -d rouleaux"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  rouleaux_data:
+    driver: local
+  postgres_rouleaux_data:
+    driver: local
+
+networks:
+  trustescrow-network:
+    external: true
+    name: trustescrow-network

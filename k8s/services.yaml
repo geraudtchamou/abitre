@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: trustescrow
+  labels:
+    app: trustescrow-backend
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5000
+      targetPort: 5000
+      protocol: TCP
+      name: http
+  selector:
+    app: trustescrow-backend
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: trustescrow
+  labels:
+    app: trustescrow-frontend
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app: trustescrow-frontend
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rust-crypto-service
+  namespace: trustescrow
+  labels:
+    app: rust-crypto
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3001
+      targetPort: 3001
+      protocol: TCP
+      name: http
+  selector:
+    app: rust-crypto
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-fraud-service
+  namespace: trustescrow
+  labels:
+    app: ai-fraud
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5001
+      targetPort: 5001
+      protocol: TCP
+      name: http
+  selector:
+    app: ai-fraud
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: trustescrow
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgres
+  selector:
+    app: postgres
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: trustescrow
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+      name: redis
+  selector:
+    app: redis

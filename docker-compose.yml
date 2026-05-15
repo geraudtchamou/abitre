@@ -1,0 +1,162 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: trustescrow_db
+    environment:
+      POSTGRES_USER: ${DB_USER:-trustescrow}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password_123}
+      POSTGRES_DB: ${DB_NAME:-trustescrow}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - trustescrow_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-trustescrow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache & Message Queue
+  redis:
+    image: redis:7-alpine
+    container_name: trustescrow_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - trustescrow_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Node.js Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: trustescrow_backend
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-trustescrow}
+      DB_PASSWORD: ${DB_PASSWORD:-secure_password_123}
+      DB_NAME: ${DB_NAME:-trustescrow}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_change_in_production}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      TWILIO_SID: ${TWILIO_SID:-}
+      TWILIO_TOKEN: ${TWILIO_TOKEN:-}
+      AI_SERVICE_URL: http://ai_service:8000
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - trustescrow_net
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run migrate && npm start"
+
+  # Python AI Service (Fraud Detection)
+  ai_service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.ai
+    container_name: trustescrow_ai
+    environment:
+      PORT: 8000
+      MODEL_PATH: /app/models
+    ports:
+      - "8000:8000"
+    networks:
+      - trustescrow_net
+    volumes:
+      - ./backend/services:/app/services
+    command: uvicorn services.ai_api:app --host 0.0.0.0 --port 8000
+
+  # Frontend (React)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_URL=http://localhost:5000/api
+        - REACT_APP_WS_URL=ws://localhost:5000
+    container_name: trustescrow_frontend
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000/api
+      - REACT_APP_WS_URL=ws://localhost:5000
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - trustescrow_net
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm start
+
+  # Nginx Reverse Proxy (Production)
+  nginx:
+    image: nginx:alpine
+    container_name: trustescrow_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - trustescrow_net
+    profiles:
+      - production
+
+  # Worker Queue Processor
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: trustescrow_worker
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      WORKER_TYPE: queue_processor
+    depends_on:
+      - postgres
+      - redis
+      - backend
+    networks:
+      - trustescrow_net
+    command: npm run worker
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  trustescrow_net:
+    driver: bridge
